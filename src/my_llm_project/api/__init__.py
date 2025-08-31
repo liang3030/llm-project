@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routes.llm_routes import router as llm_router
+from .routes.pdf_routes import router as pdf_router
 from ..core.config import settings
 
 
@@ -14,6 +15,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         docs_url="/docs",
         redoc_url="/redoc",
+        description="LLM API with PDF summarization capabilities using HuggingFace models"
     )
     
     # Add CORS middleware
@@ -27,6 +29,7 @@ def create_app() -> FastAPI:
     
     # Include routers
     app.include_router(llm_router)
+    app.include_router(pdf_router)
     
     # Add root endpoint
     @app.get("/")
@@ -37,7 +40,12 @@ def create_app() -> FastAPI:
             "version": settings.version,
             "provider": settings.model_provider,
             "model": settings.model_name,
-            "docs": "/docs"
+            "features": ["LLM Chat", "PDF Summarization"],
+            "docs": "/docs",
+            "endpoints": {
+                "llm": "/llm/",
+                "pdf": "/pdf/"
+            }
         }
     
     return app
