@@ -4,6 +4,8 @@ from typing import List, Optional
 from pathlib import Path
 import tempfile
 from io import BytesIO
+import re
+import pdfplumber
 
 try:
     import PyPDF2
@@ -48,12 +50,8 @@ class PDFProcessor:
         """Extract text from PDF bytes."""
         try:
             # Try pypdf first (more modern)
-            if HAS_PYPDF:
-                return self._extract_with_pypdf(pdf_content)
-            elif HAS_PYPDF2:
-                return self._extract_with_pypdf2(pdf_content)
-            else:
-                raise ModelError("No PDF library available")
+            return self.extract_with_pdfplumber(pdf_content)
+            
                 
         except Exception as e:
             logger.error(f"PDF extraction failed: {e}")
@@ -115,6 +113,35 @@ class PDFProcessor:
             logger.error(f"PyPDF2 extraction failed: {e}")
             raise ModelError(f"PDF reading error: {str(e)}")
     
+    def extract_with_pdfplumber(self, pdf_content:bytes) -> str:
+        """
+        Extract text usisng pdfplumber                               
+        """
+        try:
+            text_parts = []
+            with pdfplumber.open(BytesIO(pdf_content)) as pdf:
+                logger.info(f"Processing PDF with {len(pdf.pages)} pages using pdfplumber") 
+
+                for page_num, page in enumerate(pdf.pages, 1):
+                    try:
+                        text = page.extract_text()
+                        if text and text.strip():
+                            cleaned_text = self._basic_clean_text(text)
+                            text_parts.append(f"[Page {page_num}]\n{cleaned_text}\n")
+                            logger.debug(f"Extracted {len(cleaned_text)} characters from page {page_num}")
+                    except Exception as e:
+                        logger.warning(f"Failed to extract text from page {page_num}")
+                        continue
+            return "\n".join(text_parts)
+        except ImportError:
+            logger.error("pdfplumber not installed. Install with: pip install pdfplumber")
+            return ""
+        except Exception as e:
+            logger.error(f"pdfplumber extraction failed: {e}")
+            return ""
+                             
+                    
+
     def chunk_text(self, text: str, metadata: Optional[dict] = None) -> List[Document]:
         """Split text into chunks for processing."""
         if not text or not text.strip():
@@ -209,3 +236,22 @@ class PDFProcessor:
             "avg_words_per_sentence": len(words) / max(len(sentences), 1),
             "estimated_reading_time_minutes": len(words) / 200  # ~200 WPM average
         }
+    
+    def _basic_clean_text(self, text:str) -> str:
+        """
+        Basic text cleaning that works for most cases
+        """
+        if not text:
+            return ""
+        
+				# Remove excessive witespace
+        text = re.sub(r'\s+', ' ', text)
+        
+				# Remove excessive newlines but preserve paragraph breaks
+        text = re.sub(r'\n\s*\n', '\n\n', text)
+        text = re.sub(r'\n(?!\n)', ' ', text)
+
+				# Fix punctuation spacing
+        text = re.sub(r'\s+([,.!?;:])', r'\1', text)
+        text = re.sub(r'([,.!?;:])\s*', r'\1 ', text)
+        return text.strip()

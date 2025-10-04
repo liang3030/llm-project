@@ -19,6 +19,7 @@ try:
     
     app = create_app()
     
+    
     if __name__ == "__main__":
         print(f"Starting {settings.app_name}")
         print(f"Model: {settings.model_name}")
